@@ -187,25 +187,32 @@ function clearError() {
 }
 
 document.getElementById('build-btn').addEventListener('click', buildGraph);
-document.getElementById('vertices-input').addEventListener('keydown', e => { if (e.key === 'Enter') buildGraph(); });
+
+let debounceTimer = null;
+function debouncedBuild() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(buildGraph, 300);
+}
+document.getElementById('vertices-input').addEventListener('input', debouncedBuild);
+document.getElementById('edges-input').addEventListener('input', debouncedBuild);
 
 function buildGraph() {
   clearError();
   const vRaw = document.getElementById('vertices-input').value.trim();
   const eRaw = document.getElementById('edges-input').value.trim();
 
-  if (!vRaw) { showError('Please enter at least one vertex.'); return; }
+  clearError(); if (!vRaw) return;
 
   const vertexList = vRaw.split(',').map(v => v.trim()).filter(Boolean);
-  if (vertexList.length === 0) { showError('No valid vertices found.'); return; }
+  if (vertexList.length === 0) return;
 
   const edgeList = [];
   const edgeLines = eRaw.split('\n').map(l => l.trim()).filter(Boolean);
   for (const line of edgeLines) {
     const parts = line.split('-').map(p => p.trim());
-    if (parts.length !== 2) { showError(`Bad edge format: "${line}" — use a-b`); return; }
+    if (parts.length !== 2) continue;
     const [a, b] = parts;
-    if (!vertexList.includes(a)) { showError(`Unknown vertex "${a}" in edge "${line}"`); return; }
+
     if (!vertexList.includes(b)) { showError(`Unknown vertex "${b}" in edge "${line}"`); return; }
     edgeList.push([a, b]);
   }
