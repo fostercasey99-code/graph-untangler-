@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graph Untangler</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #2e2e2e;
+    --text: #e8e8e8;
+    --muted: #666;
+    --accent: #7c6af7;
+    --accent2: #a78bfa;
+    --cross: #f87171;
+    --planar: #34d399;
+    --node-bg: #1e1b4b;
+    --node-stroke: #7c6af7;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+
+  header {
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; color: var(--accent2); letter-spacing: 0.05em; }
+  .logo span { color: var(--muted); }
+  .status-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 4px 12px; border-radius: 100px; border: 1px solid var(--border); color: var(--muted); transition: all 0.3s; }
+  .status-pill.planar { border-color: var(--planar); color: var(--planar); }
+  .status-pill.crossing { border-color: var(--cross); color: var(--cross); }
+
+  main { flex: 1; display: grid; grid-template-columns: 300px 1fr; }
+
+  .sidebar { border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+  .section-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+
+  .input-group { display: flex; flex-direction: column; gap: 6px; }
+  .input-group label { font-size: 12px; color: var(--muted); }
+  .input-group input, .input-group textarea {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 12px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px;
+    width: 100%; outline: none; transition: border-color 0.2s; resize: none;
+  }
+  .input-group input:focus, .input-group textarea:focus { border-color: var(--accent); }
+  .input-group textarea { height: 80px; line-height: 1.6; }
+
+  .hint-text { font-size: 11px; color: var(--muted); line-height: 1.6; }
+  .hint-text code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-family: 'DM Mono', monospace; color: var(--accent2); }
+
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; width: 100%; }
+  .btn:hover { background: var(--accent2); }
+  .btn-ghost { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 7px 16px; font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; width: 100%; }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent2); }
+
+  .graph-info { background: var(--surface); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; font-family: 'DM Mono', monospace; font-size: 12px; }
+  .info-row { display: flex; justify-content: space-between; color: var(--muted); }
+  .info-row span:last-child { color: var(--text); }
+
+  .error-msg { font-size: 12px; color: var(--cross); background: #1f1010; border: 1px solid #3d1515; border-radius: 8px; padding: 10px 12px; display: none; }
+
+  .canvas-wrap { position: relative; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+  canvas { display: block; touch-action: none; cursor: default; }
+
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); height: 100%; position: absolute; }
+  .empty-state .big { font-size: 44px; opacity: 0.2; }
+  .empty-state p { font-size: 13px; text-align: center; max-width: 220px; line-height: 1.6; }
+
+  .canvas-controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); }
+  .hint-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 6px 14px; border-radius: 100px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); pointer-events: none; white-space: nowrap; transition: all 0.3s; }
+
+  .examples { display: flex; flex-direction: column; gap: 6px; }
+  .example-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); cursor: pointer; text-align: left; transition: all 0.15s; }
+  .example-btn:hover { border-color: var(--accent); color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Graph Untangler</div>
+  <div class="status-pill" id="status-pill">ready</div>
+</header>
+
+<main>
+  <aside class="sidebar">
+    <div>
+      <div class="section-label">Vertices</div>
+      <div class="input-group">
+        <input type="text" id="vertices-input" placeholder="a, b, c, d, e">
+        <p class="hint-text">Comma-separated list of vertex names</p>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Edges</div>
+      <div class="input-group">
+        <textarea id="edges-input" placeholder="a-b&#10;b-c&#10;c-d&#10;a-c"></textarea>
+        <p class="hint-text">One edge per line using <code>a-b</code> format</p>
+      </div>
+    </div>
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <button class="btn" id="build-btn">Build graph</button>
+
+    <div>
+      <div class="section-label">Examples</div>
+      <div class="examples">
+        <button class="example-btn" onclick="loadExample('pentagon')">Pentagon (K₅) — non-planar</button>
+        <button class="example-btn" onclick="loadExample('k33')">K₃,₃ — non-planar</button>
+        <button class="example-btn" onclick="loadExample('simple')">Simple planar graph</button>
+        <button class="example-btn" onclick="loadExample('petersen')">Petersen graph</button>
+      </div>
+    </div>
+
+    <div id="info-wrap" style="display:none">
+      <div class="section-label">Graph info</div>
+      <div class="graph-info">
+        <div class="info-row"><span>Vertices</span><span id="info-v">—</span></div>
+        <div class="info-row"><span>Edges</span><span id="info-e">—</span></div>
+        <div class="info-row"><span>e ≤ 3v−6?</span><span id="info-euler">—</span></div>
+        <div class="info-row"><span>Crossings</span><span id="info-cross">—</span></div>
+      </div>
+    </div>
+
+    <button class="btn-ghost" id="reset-btn" style="display:none" onclick="resetLayout()">Reset layout</button>
+  </aside>
+
+  <div class="canvas-wrap" id="canvas-wrap">
+    <div class="empty-state" id="empty-state">
+      <div class="big">◈</div>
+      <p>Enter vertices and edges on the left, then click Build graph</p>
+    </div>
+    <canvas id="c" style="display:none"></canvas>
+    <div class="canvas-controls" id="canvas-controls" style="display:none">
+      <div class="hint-pill" id="hint-pill">drag vertices to untangle</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let nodes = {}, edges = [], initPos = {};
+let dragging = null, hovered = null, offX = 0, offY = 0;
+const R = 18;
+
+const EXAMPLES = {
+  pentagon: {
+    vertices: 'a, b, c, d, e',
+    edges: 'a-b\nb-c\nc-d\nd-e\ne-a\na-c\na-d\nb-d\nb-e\nc-e'
+  },
+  k33: {
+    vertices: 'a, b, c, d, e, f',
+    edges: 'a-d\na-e\na-f\nb-d\nb-e\nb-f\nc-d\nc-e\nc-f'
+  },
+  simple: {
+    vertices: 'a, b, c, d, e',
+    edges: 'a-b\nb-c\nc-d\nd-e\ne-a\nb-d'
+  },
+  petersen: {
+    vertices: 'a, b, c, d, e, f, g, h, i, j',
+    edges: 'a-b\nb-c\nc-d\nd-e\ne-a\na-f\nb-g\nc-h\nd-i\ne-j\nf-h\nh-j\nj-g\ng-i\ni-f'
+  }
+};
+
+function loadExample(name) {
+  const ex = EXAMPLES[name];
+  document.getElementById('vertices-input').value = ex.vertices;
+  document.getElementById('edges-input').value = ex.edges;
+  buildGraph();
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function clearError() {
+  document.getElementById('error-msg').style.display = 'none';
+}
+
+document.getElementById('build-btn').addEventListener('click', buildGraph);
+document.getElementById('vertices-input').addEventListener('keydown', e => { if (e.key === 'Enter') buildGraph(); });
+
+function buildGraph() {
+  clearError();
+  const vRaw = document.getElementById('vertices-input').value.trim();
+  const eRaw = document.getElementById('edges-input').value.trim();
+
+  if (!vRaw) { showError('Please enter at least one vertex.'); return; }
+
+  const vertexList = vRaw.split(',').map(v => v.trim()).filter(Boolean);
+  if (vertexList.length === 0) { showError('No valid vertices found.'); return; }
+
+  const edgeList = [];
+  const edgeLines = eRaw.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of edgeLines) {
+    const parts = line.split('-').map(p => p.trim());
+    if (parts.length !== 2) { showError(`Bad edge format: "${line}" — use a-b`); return; }
+    const [a, b] = parts;
+    if (!vertexList.includes(a)) { showError(`Unknown vertex "${a}" in edge "${line}"`); return; }
+    if (!vertexList.includes(b)) { showError(`Unknown vertex "${b}" in edge "${line}"`); return; }
+    edgeList.push([a, b]);
+  }
+
+  const wrap = document.getElementById('canvas-wrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  canvas.width = W; canvas.height = H;
+
+  nodes = {}; initPos = {};
+  const n = vertexList.length;
+  const cx = W / 2, cy = H / 2;
+  const r = Math.min(W, H) * 0.36;
+
+  vertexList.forEach((v, i) => {
+    const angle = (2 * Math.PI * i / n) - Math.PI / 2;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    nodes[v] = { x, y, label: v };
+    initPos[v] = { x, y };
+  });
+
+  edges = edgeList;
+
+  document.getElementById('empty-state').style.display = 'none';
+  canvas.style.display = 'block';
+  document.getElementById('canvas-controls').style.display = 'flex';
+  document.getElementById('info-wrap').style.display = 'block';
+  document.getElementById('reset-btn').style.display = 'block';
+
+  const v = vertexList.length, e = edges.length;
+  document.getElementById('info-v').textContent = v;
+  document.getElementById('info-e').textContent = e;
+  const eulerOk = e <= 3*v - 6;
+  const eulerEl = document.getElementById('info-euler');
+  eulerEl.textContent = eulerOk ? 'yes' : 'no — likely non-planar';
+  eulerEl.style.color = eulerOk ? '#e8e8e8' : '#f87171';
+
+  draw();
+}
+
+function resetLayout() {
+  Object.keys(nodes).forEach(k => {
+    nodes[k].x = initPos[k].x;
+    nodes[k].y = initPos[k].y;
+  });
+  draw();
+}
+
+function seg_intersect(ax,ay,bx,by,cx,cy,dx,dy) {
+  const d1x=bx-ax,d1y=by-ay,d2x=dx-cx,d2y=dy-cy;
+  const denom=d1x*d2y-d1y*d2x;
+  if (Math.abs(denom)<1e-10) return false;
+  const t=((cx-ax)*d2y-(cy-ay)*d2x)/denom;
+  const u=((cx-ax)*d1y-(cy-ay)*d1x)/denom;
+  return t>0.05&&t<0.95&&u>0.05&&u<0.95;
+}
+
+function crossingEdges() {
+  const crossed = new Set();
+  for (let i=0;i<edges.length;i++) {
+    for (let j=i+1;j<edges.length;j++) {
+      const [a,b]=edges[i],[c,d]=edges[j];
+      if (a===c||a===d||b===c||b===d) continue;
+      const na=nodes[a],nb=nodes[b],nc=nodes[c],nd=nodes[d];
+      if (!na||!nb||!nc||!nd) continue;
+      if (seg_intersect(na.x,na.y,nb.x,nb.y,nc.x,nc.y,nd.x,nd.y)) {
+        crossed.add(i); crossed.add(j);
+      }
+    }
+  }
+  return crossed;
+}
+
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#0f0f0f';
+  ctx.fillRect(0,0,W,H);
+
+  const crossed = crossingEdges();
+  const crossPairs = crossed.size / 2;
+  document.getElementById('info-cross').textContent = Math.floor(crossPairs);
+
+  edges.forEach(([a,b],i) => {
+    const na=nodes[a],nb=nodes[b];
+    if (!na||!nb) return;
+    ctx.beginPath();
+    ctx.moveTo(na.x,na.y);
+    ctx.lineTo(nb.x,nb.y);
+    ctx.strokeStyle = crossed.has(i) ? '#f87171' : '#3a3a3a';
+    ctx.lineWidth = crossed.has(i) ? 2 : 1.5;
+    ctx.stroke();
+  });
+
+  Object.values(nodes).forEach(n => {
+    const isActive = dragging===n || hovered===n;
+    ctx.beginPath();
+    ctx.arc(n.x,n.y,R,0,Math.PI*2);
+    ctx.fillStyle = isActive ? '#4c3fcf' : '#1e1b4b';
+    ctx.fill();
+    ctx.strokeStyle = '#7c6af7';
+    ctx.lineWidth = isActive ? 2 : 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#a78bfa';
+    ctx.font = '500 12px DM Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x, n.y);
+  });
+
+  const pill = document.getElementById('hint-pill');
+  const status = document.getElementById('status-pill');
+  if (crossed.size === 0) {
+    pill.textContent = 'planar — no crossings!';
+    pill.style.borderColor = '#34d399';
+    pill.style.color = '#34d399';
+    status.textContent = 'planar';
+    status.className = 'status-pill planar';
+  } else {
+    pill.textContent = 'drag vertices to untangle — red = crossing';
+    pill.style.borderColor = '#2e2e2e';
+    pill.style.color = '#666';
+    status.textContent = 'untangle me';
+    status.className = 'status-pill crossing';
+  }
+}
+
+function nodeAt(x,y) {
+  return Object.values(nodes).find(n => Math.hypot(n.x-x,n.y-y)<=R+4)||null;
+}
+function getXY(e) {
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width;
+  const src=e.touches?e.touches[0]:e;
+  return [(src.clientX-rect.left)*scaleX,(src.clientY-rect.top)*scaleX];
+}
+
+canvas.addEventListener('mousedown', e => {
+  const [x,y]=getXY(e);
+  const n=nodeAt(x,y);
+  if (n) { dragging=n; offX=n.x-x; offY=n.y-y; canvas.style.cursor='grabbing'; }
+});
+canvas.addEventListener('mousemove', e => {
+  const [x,y]=getXY(e);
+  if (dragging) {
+    dragging.x=Math.max(R,Math.min(canvas.width-R,x+offX));
+    dragging.y=Math.max(R,Math.min(canvas.height-R,y+offY));
+    draw();
+  } else {
+    hovered=nodeAt(x,y);
+    canvas.style.cursor=hovered?'grab':'default';
+    if (Object.keys(nodes).length) draw();
+  }
+});
+canvas.addEventListener('mouseup', () => { dragging=null; canvas.style.cursor='default'; });
+canvas.addEventListener('mouseleave', () => { dragging=null; hovered=null; });
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const [x,y]=getXY(e);
+  const n=nodeAt(x,y);
+  if (n) { dragging=n; offX=n.x-x; offY=n.y-y; }
+},{passive:false});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!dragging) return;
+  const [x,y]=getXY(e);
+  dragging.x=Math.max(R,Math.min(canvas.width-R,x+offX));
+  dragging.y=Math.max(R,Math.min(canvas.height-R,y+offY));
+  draw();
+},{passive:false});
+canvas.addEventListener('touchend', () => { dragging=null; });
+window.addEventListener('resize', () => {
+  if (!Object.keys(nodes).length) return;
+  const wrap = document.getElementById('canvas-wrap');
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  draw();
+});
+</script>
+</body>
+</html>
